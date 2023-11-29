@@ -454,6 +454,7 @@ pub enum ValueDef<'a> {
     /// e.g. `import [Req] as Http from InternalHttp`.
     ModuleImport {
         name: Loc<crate::header::ModuleName<'a>>,
+        alias: Option<Loc<crate::header::ModuleName<'a>>>,
     },
 }
 
@@ -1790,7 +1791,9 @@ impl<'a> Malformed for ValueDef<'a> {
                 condition,
                 preceding_comment: _,
             } => condition.is_malformed(),
-            ValueDef::ModuleImport { name } => name.value.contains_dot(),
+            ValueDef::ModuleImport { name, alias } => {
+                name.value.contains_dot() || alias.map_or(false, |x| x.value.contains_dot())
+            }
         }
     }
 }
