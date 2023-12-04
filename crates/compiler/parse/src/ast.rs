@@ -451,11 +451,14 @@ pub enum ValueDef<'a> {
         preceding_comment: Region,
     },
 
-    /// e.g. `import [Req] as Http from InternalHttp`.
+    /// e.g. `import InternalHttp as Http exposing [Req]`.
     ModuleImport {
-        name: Loc<crate::header::ModuleName<'a>>,
-        alias: Option<Loc<crate::header::ModuleName<'a>>>,
-        exposed: Collection<'a, Loc<Spaced<'a, crate::header::ExposedName<'a>>>>,
+        name: Loc<Spaced<'a, crate::header::ModuleName<'a>>>,
+        alias: Option<Loc<Spaced<'a, crate::header::ModuleName<'a>>>>,
+        exposed: Option<(
+            &'a [CommentOrNewline<'a>],
+            Collection<'a, Loc<Spaced<'a, crate::header::ExposedName<'a>>>>,
+        )>,
     },
 }
 
@@ -1796,7 +1799,10 @@ impl<'a> Malformed for ValueDef<'a> {
                 name,
                 alias,
                 exposed: _,
-            } => name.value.contains_dot() || alias.map_or(false, |x| x.value.contains_dot()),
+            } => {
+                name.value.item().contains_dot()
+                    || alias.map_or(false, |x| x.value.item().contains_dot())
+            }
         }
     }
 }
