@@ -165,11 +165,11 @@ reserve = \@Dict { buckets, data, maxBucketCapacity: originalMaxBucketCapacity, 
 
     requestedShifts = calcShiftsForSize size maxLoadFactor
     if (List.isEmpty buckets) || requestedShifts > shifts then
-        (buckets0, maxBucketCapacity) = allocBucketsFromShift requestedShifts maxLoadFactor
-        buckets1 = fillBucketsFromData buckets0 data requestedShifts
+        (buckets, maxBucketCapacity) = allocBucketsFromShift requestedShifts maxLoadFactor
+        buckets = fillBucketsFromData buckets data requestedShifts
         sizeNat = Num.toNat size
         @Dict {
-            buckets: buckets1,
+            buckets,
             data: List.reserve data (Num.subSaturated sizeNat currentSize),
             maxBucketCapacity,
             maxLoadFactor,
@@ -188,10 +188,10 @@ releaseExcessCapacity = \@Dict { buckets, data, maxBucketCapacity: originalMaxBu
     # NOTE: If we want, we technically could increase the load factor here to potentially minimize size more.
     minShifts = calcShiftsForSize (Num.toU64 size) maxLoadFactor
     if minShifts < shifts then
-        (buckets0, maxBucketCapacity) = allocBucketsFromShift minShifts maxLoadFactor
-        buckets1 = fillBucketsFromData buckets0 data minShifts
+        (buckets, maxBucketCapacity) = allocBucketsFromShift minShifts maxLoadFactor
+        buckets = fillBucketsFromData buckets data minShifts
         @Dict {
-            buckets: buckets1,
+            buckets,
             data: List.releaseExcessCapacity data,
             maxBucketCapacity,
             maxLoadFactor,
@@ -451,26 +451,26 @@ insert = \dict, key, value ->
     insertHelper buckets data bucketIndex distAndFingerprint key value maxBucketCapacity maxLoadFactor shifts
 
 insertHelper : List Bucket, List (k, v), Nat, U32, k, v, U64, F32, U8 -> Dict k v
-insertHelper = \buckets0, data0, bucketIndex0, distAndFingerprint0, key, value, maxBucketCapacity, maxLoadFactor, shifts ->
-    loaded = listGetUnsafe buckets0 (Num.toNat bucketIndex0)
-    if distAndFingerprint0 == loaded.distAndFingerprint then
-        (foundKey, _) = listGetUnsafe data0 (Num.toNat loaded.dataIndex)
+insertHelper = \buckets, data, bucketIndex, distAndFingerprint, key, value, maxBucketCapacity, maxLoadFactor, shifts ->
+    loaded = listGetUnsafe buckets (Num.toNat bucketIndex)
+    if distAndFingerprint == loaded.distAndFingerprint then
+        (foundKey, _) = listGetUnsafe data (Num.toNat loaded.dataIndex)
         if foundKey == key then
-            data1 = List.set data0 (Num.toNat loaded.dataIndex) (key, value)
-            @Dict { buckets: buckets0, data: data1, maxBucketCapacity, maxLoadFactor, shifts }
+            data1 = List.set data (Num.toNat loaded.dataIndex) (key, value)
+            @Dict { buckets, data, maxBucketCapacity, maxLoadFactor, shifts }
         else
-            bucketIndex1 = nextBucketIndex bucketIndex0 (List.len buckets0)
-            distAndFingerprint1 = incrementDist distAndFingerprint0
-            insertHelper buckets0 data0 bucketIndex1 distAndFingerprint1 key value maxBucketCapacity maxLoadFactor shifts
-    else if distAndFingerprint0 > loaded.distAndFingerprint then
-        data1 = List.append data0 (key, value)
-        dataIndex = (List.len data1) - 1
-        buckets1 = placeAndShiftUp buckets0 { distAndFingerprint: distAndFingerprint0, dataIndex: Num.toU32 dataIndex } bucketIndex0
-        @Dict { buckets: buckets1, data: data1, maxBucketCapacity, maxLoadFactor, shifts }
+            bucketIndex = nextBucketIndex bucketIndex (List.len buckets)
+            distAndFingerprint = incrementDist distAndFingerprint
+            insertHelper buckets data bucketIndex distAndFingerprint key value maxBucketCapacity maxLoadFactor shifts
+    else if distAndFingerprint > loaded.distAndFingerprint then
+        data = List.append data (key, value)
+        dataIndex = (List.len data) - 1
+        buckets = placeAndShiftUp buckets { distAndFingerprint, dataIndex: Num.toU32 dataIndex } bucketIndex
+        @Dict { buckets, data, maxBucketCapacity, maxLoadFactor, shifts }
     else
-        bucketIndex1 = nextBucketIndex bucketIndex0 (List.len buckets0)
-        distAndFingerprint1 = incrementDist distAndFingerprint0
-        insertHelper buckets0 data0 bucketIndex1 distAndFingerprint1 key value maxBucketCapacity maxLoadFactor shifts
+        bucketIndex = nextBucketIndex bucketIndex (List.len buckets)
+        distAndFingerprint = incrementDist distAndFingerprint
+        insertHelper buckets data bucketIndex distAndFingerprint key value maxBucketCapacity maxLoadFactor shifts
 
 ## Remove a value from the dictionary for a specified key.
 ## ```
@@ -484,14 +484,14 @@ insertHelper = \buckets0, data0, bucketIndex0, distAndFingerprint0, key, value, 
 remove : Dict k v, k -> Dict k v
 remove = \@Dict { buckets, data, maxBucketCapacity, maxLoadFactor, shifts }, key ->
     if !(List.isEmpty data) then
-        (bucketIndex0, distAndFingerprint0) = nextWhileLess buckets key shifts
-        (bucketIndex1, distAndFingerprint1) = removeHelper buckets bucketIndex0 distAndFingerprint0 data key
+        (bucketIndex, distAndFingerprint) = nextWhileLess buckets key shifts
+        (bucketIndex, distAndFingerprint) = removeHelper buckets bucketIndex distAndFingerprint data key
 
-        bucket = listGetUnsafe buckets (Num.toNat bucketIndex1)
-        if distAndFingerprint1 != bucket.distAndFingerprint then
+        bucket = listGetUnsafe buckets (Num.toNat bucketIndex)
+        if distAndFingerprint != bucket.distAndFingerprint then
             @Dict { buckets, data, maxBucketCapacity, maxLoadFactor, shifts }
         else
-            removeBucket (@Dict { buckets, data, maxBucketCapacity, maxLoadFactor, shifts }) bucketIndex1
+            removeBucket (@Dict { buckets, data, maxBucketCapacity, maxLoadFactor, shifts }) bucketIndex
     else
         @Dict { buckets, data, maxBucketCapacity, maxLoadFactor, shifts }
 
@@ -650,17 +650,17 @@ insertAll = \xs, ys ->
 ## expect Dict.keepShared first second == expected
 ## ```
 keepShared : Dict k v, Dict k v -> Dict k v where v implements Eq
-keepShared = \xs0, ys0 ->
-    (xs1, ys1) =
-        if len ys0 < len xs0 then
-            (ys0, xs0)
+keepShared = \xs, ys ->
+    (xs, ys) =
+        if len ys < len xs then
+            (ys, xs)
         else
-            (xs0, ys0)
+            (xs, ys)
     walk
-        xs1
-        (withCapacity (len xs1))
+        xs
+        (withCapacity (len xs))
         (\state, k, v ->
-            when get ys1 k is
+            when get ys k is
                 Ok yv if v == yv ->
                     insert state k v
 
@@ -766,35 +766,35 @@ findHelper = \buckets, bucketIndex, distAndFingerprint, data, key ->
         findHelper buckets (nextBucketIndex bucketIndex (List.len buckets)) (incrementDist distAndFingerprint) data key
 
 removeBucket : Dict k v, Nat -> Dict k v
-removeBucket = \@Dict { buckets: buckets0, data: data0, maxBucketCapacity, maxLoadFactor, shifts }, bucketIndex0 ->
-    { dataIndex: dataIndexToRemove } = listGetUnsafe buckets0 bucketIndex0
+removeBucket = \@Dict { buckets, data, maxBucketCapacity, maxLoadFactor, shifts }, bucketIndex0 ->
+    { dataIndex: dataIndexToRemove } = listGetUnsafe buckets bucketIndex
 
-    (buckets1, bucketIndex1) = removeBucketHelper buckets0 bucketIndex0
-    buckets2 = List.set buckets1 bucketIndex1 emptyBucket
+    (buckets, bucketIndex) = removeBucketHelper buckets bucketIndex
+    buckets = List.set buckets bucketIndex emptyBucket
 
-    lastDataIndex = List.len data0 - 1
+    lastDataIndex = List.len data - 1
     if (Num.toNat dataIndexToRemove) != lastDataIndex then
         # Swap removed item to the end
-        data1 = List.swap data0 (Num.toNat dataIndexToRemove) lastDataIndex
-        (key, _) = listGetUnsafe data1 (Num.toNat dataIndexToRemove)
+        data1 = List.swap data (Num.toNat dataIndexToRemove) lastDataIndex
+        (key, _) = listGetUnsafe data (Num.toNat dataIndexToRemove)
 
         # Update the data index of the new value.
         hash = hashKey key
-        bucketIndex2 = bucketIndexFromHash hash shifts
+        bucketIndex = bucketIndexFromHash hash shifts
 
-        bucketIndex3 = scanForIndex buckets2 bucketIndex2 (Num.toU32 lastDataIndex)
-        swapBucket = listGetUnsafe buckets2 bucketIndex3
+        bucketIndex = scanForIndex buckets bucketIndex (Num.toU32 lastDataIndex)
+        swapBucket = listGetUnsafe buckets bucketIndex
         @Dict {
-            buckets: List.set buckets2 bucketIndex3 { swapBucket & dataIndex: dataIndexToRemove },
-            data: List.dropLast data1 1,
+            buckets: List.set buckets bucketIndex { swapBucket & dataIndex: dataIndexToRemove },
+            data: List.dropLast data 1,
             maxBucketCapacity,
             maxLoadFactor,
             shifts,
         }
     else
         @Dict {
-            buckets: buckets2,
-            data: List.dropLast data0 1,
+            buckets,
+            data: List.dropLast data 1,
             maxBucketCapacity,
             maxLoadFactor,
             shifts,
@@ -823,10 +823,10 @@ increaseSize : Dict k v -> Dict k v
 increaseSize = \@Dict { data, maxBucketCapacity, maxLoadFactor, shifts } ->
     if maxBucketCapacity != maxBucketCount then
         newShifts = shifts - 1
-        (buckets0, newMaxBucketCapacity) = allocBucketsFromShift newShifts maxLoadFactor
-        buckets1 = fillBucketsFromData buckets0 data newShifts
+        (buckets, newMaxBucketCapacity) = allocBucketsFromShift newShifts maxLoadFactor
+        buckets = fillBucketsFromData buckets data newShifts
         @Dict {
-            buckets: buckets1,
+            buckets,
             data,
             maxBucketCapacity: newMaxBucketCapacity,
             maxLoadFactor,
@@ -870,10 +870,10 @@ calcNumBuckets = \shifts ->
         (Num.shiftLeftBy 1 (64 - shifts))
         maxBucketCount
 
-fillBucketsFromData = \buckets0, data, shifts ->
-    buckets1, (key, _), dataIndex <- List.walkWithIndex data buckets0
-    (bucketIndex, distAndFingerprint) = nextWhileLess buckets1 key shifts
-    placeAndShiftUp buckets1 { distAndFingerprint, dataIndex: Num.toU32 dataIndex } bucketIndex
+fillBucketsFromData = \buckets, data, shifts ->
+    buckets, (key, _), dataIndex <- List.walkWithIndex data buckets
+    (bucketIndex, distAndFingerprint) = nextWhileLess buckets key shifts
+    placeAndShiftUp buckets { distAndFingerprint, dataIndex: Num.toU32 dataIndex } bucketIndex
 
 nextWhileLess : List Bucket, k, U8 -> (Nat, U32) where k implements Hash & Eq
 nextWhileLess = \buckets, key, shifts ->
@@ -890,16 +890,16 @@ nextWhileLessHelper = \buckets, bucketIndex, distAndFingerprint ->
     else
         (bucketIndex, distAndFingerprint)
 
-placeAndShiftUp = \buckets0, bucket0, bucketIndex ->
-    loaded = listGetUnsafe buckets0 (Num.toNat bucketIndex)
+placeAndShiftUp = \buckets, bucket, bucketIndex ->
+    loaded = listGetUnsafe buckets (Num.toNat bucketIndex)
     if loaded.distAndFingerprint != 0 then
-        { list: buckets1, value: bucket1 } = List.replace buckets0 (Num.toNat bucketIndex) bucket0
+        { list: buckets, value: bucket } = List.replace buckets (Num.toNat bucketIndex) bucket
         placeAndShiftUp
-            buckets1
-            { bucket1 & distAndFingerprint: incrementDist bucket1.distAndFingerprint }
-            (nextBucketIndex bucketIndex (List.len buckets1))
+            buckets
+            { bucket & distAndFingerprint: incrementDist bucket.distAndFingerprint }
+            (nextBucketIndex bucketIndex (List.len buckets))
     else
-        List.set buckets0 (Num.toNat bucketIndex) bucket0
+        List.set buckets (Num.toNat bucketIndex) bucket
 
 nextBucketIndex = \bucketIndex, maxBuckets ->
     # I just ported this impl directly.
