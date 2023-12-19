@@ -1202,6 +1202,7 @@ pub fn check_file<'a>(
     emit_timings: bool,
     roc_cache_dir: RocCacheDir<'_>,
     threading: Threading,
+    watch: bool,
 ) -> Result<(Problems, Duration), LoadingProblem<'a>> {
     let compilation_start = Instant::now();
 
