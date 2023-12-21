@@ -63,6 +63,7 @@ pub fn generate(
                 &triple,
                 BuildOrdering::BuildIfChecks,
                 Threading::AllAvailable,
+                false,
             );
 
             let arena = ManuallyDrop::new(Bump::new());
@@ -386,6 +387,7 @@ pub fn load_types(
             palette: DEFAULT_PALETTE,
             threading,
             exec_mode: ExecutionMode::Check,
+            watch: false,
         },
     )
     .unwrap_or_else(|problem| match problem {
