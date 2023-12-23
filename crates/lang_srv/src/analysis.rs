@@ -52,7 +52,6 @@ impl GlobalAnalysis {
             roc_reporting::report::RenderTarget::Generic,
             RocCacheDir::Persistent(cache::roc_cache_dir().as_path()),
             roc_reporting::report::DEFAULT_PALETTE,
-            false,
         );
 
         let module = match loaded {

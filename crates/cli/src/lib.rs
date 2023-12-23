@@ -488,7 +488,6 @@ pub fn test(matches: &ArgMatches, triple: Triple, watch: bool) -> io::Result<i32
         palette: roc_reporting::report::DEFAULT_PALETTE,
         threading,
         exec_mode: ExecutionMode::Test,
-        watch,
     };
     let load_result = roc_load::load_and_monomorphize(
         arena,
@@ -777,7 +776,7 @@ pub fn build(
         emit_llvm_ir,
     };
 
-    let load_config = standard_load_config(&triple, build_ordering, threading, watch);
+    let load_config = standard_load_config(&triple, build_ordering, threading);
 
     let res_binary_path = build_file(
         &arena,
