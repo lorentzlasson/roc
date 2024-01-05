@@ -23,7 +23,7 @@ Eq implements
     ##
     ## 1. Tags are equal if their name and also contents are equal.
     ## 2. Records are equal if their fields are equal.
-    ## 3. The collections [Str], [List], [Dict], and [Set] are equal iff they
+    ## 3. The collections [Str], [List], [Dict], and [Set] are equal if they
     ## are the same length and their elements are equal.
     ## 4. [Num] values are equal if their numbers are equal. However, if both
     ## inputs are *NaN* then `isEq` returns `Bool.false`. Refer to `Num.isNaN`
